@@ -266,12 +266,19 @@ class NRY_Render {
 			return '';
 		}
 		$title = ! empty( $market['posts_title'] ) ? $market['posts_title'] : 'آخرین مطالب ' . $market['label'];
-		$h     = '<section class="nry nry-posts" id="nry-posts">' . self::head( $title ) . '<ul>';
+		$h     = '<section class="nry nry-posts" id="nry-posts">' . self::head( $title ) . '<ul class="nry-posts__list">';
 		foreach ( $posts as $p ) {
-			$h .= '<li><a href="' . esc_url( get_permalink( $p ) ) . '">' . esc_html( get_the_title( $p ) ) . '</a><time datetime="' . esc_attr( get_the_date( 'c', $p ) ) . '">' . esc_html( nry_fa( get_the_date( '', $p ) ) ) . '</time></li>';
+			$url   = get_permalink( $p );
+			$thumb = function_exists( 'get_the_post_thumbnail' ) ? get_the_post_thumbnail( $p, 'medium', array( 'class' => 'nry-posts__img', 'loading' => 'lazy', 'alt' => '' ) ) : '';
+			$h    .= '<li class="nry-posts__item' . ( $thumb ? '' : ' nry-posts__item--text' ) . '">';
+			if ( $thumb ) {
+				$h .= '<a class="nry-posts__thumb" href="' . esc_url( $url ) . '" tabindex="-1" aria-hidden="true">' . $thumb . '</a>';
+			}
+			$h .= '<div class="nry-posts__body"><a class="nry-posts__title" href="' . esc_url( $url ) . '">' . esc_html( get_the_title( $p ) ) . '</a>';
+			$h .= '<time datetime="' . esc_attr( get_the_date( 'c', $p ) ) . '">' . esc_html( nry_fa( get_the_date( '', $p ) ) ) . '</time></div></li>';
 		}
 		$link = get_term_link( $term, $tax );
-		$h   .= '</ul>' . ( is_wp_error( $link ) ? '' : '<a class="nry-posts__more" href="' . esc_url( $link ) . '">همه‌ی مطالب ←</a>' ) . '</section>';
+		$h   .= '</ul>' . ( is_wp_error( $link ) ? '' : '<a class="nry-posts__more" href="' . esc_url( $link ) . '">همه‌ی مطالب ' . esc_html( isset( $market['label'] ) ? $market['label'] : '' ) . ' ←</a>' ) . '</section>';
 		return $h;
 	}
 
