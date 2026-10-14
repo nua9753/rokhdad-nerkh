@@ -78,19 +78,38 @@ class NRY_Admin {
 			}
 		} elseif ( 'inject' === $tab ) {
 			$rules = array();
+			$empty = array();
 			$raw   = isset( $_POST['rule'] ) && is_array( $_POST['rule'] ) ? wp_unslash( $_POST['rule'] ) : array(); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
-			foreach ( array_slice( $raw, 0, 20 ) as $r ) {
-				$code = isset( $r['code'] ) ? wp_kses_post( $r['code'] ) : '';
-				// A rule with no content, or ticked for removal, is dropped.
-				if ( '' === trim( $code ) || ! empty( $r['remove'] ) ) {
+			foreach ( array_slice( $raw, 0, 30 ) as $r ) {
+				if ( ! empty( $r['remove'] ) ) {
 					continue;
+				}
+				$code = isset( $r['code'] ) ? trim( wp_kses_post( $r['code'] ) ) : '';
+				// A module picked from the list is added here too, so it works even when the page script does not run.
+				if ( ! empty( $r['add'] ) && 0 === strpos( (string) $r['add'], '[gn_' ) && false === strpos( $code, (string) $r['add'] ) ) {
+					$code = trim( $code . "\n" . sanitize_text_field( $r['add'] ) );
+				}
+				// «آخرین مطالب»: a category or tag picked in the rule becomes a [gn_posts] module.
+				$ptype = isset( $r['posts_type'] ) ? $r['posts_type'] : '';
+				$pterm = 'cat' === $ptype ? absint( isset( $r['posts_cat'] ) ? $r['posts_cat'] : 0 ) : ( 'tag' === $ptype ? self::tag_id( isset( $r['posts_tag'] ) ? $r['posts_tag'] : '' ) : 0 );
+				if ( $pterm ) {
+					$count = in_array( (int) ( isset( $r['posts_count'] ) ? $r['posts_count'] : 5 ), array( 5, 10 ), true ) ? (int) $r['posts_count'] : 5;
+					$code  = trim( $code . "\n" . '[gn_posts ' . ( 'cat' === $ptype ? 'cat' : 'tag' ) . '="' . $pterm . '" count="' . $count . '"]' );
 				}
 				$where = isset( $r['where'] ) && in_array( $r['where'], array( 'page', 'cat', 'tag', 'id', 'posts' ), true ) ? $r['where'] : 'page';
 				$field = array( 'page' => 'page_id', 'cat' => 'cat_id', 'tag' => 'tag_id', 'id' => 'post_id' );
+				$id    = 'tag' === $where ? self::tag_id( isset( $r['tag_name'] ) ? $r['tag_name'] : '' ) : ( isset( $field[ $where ], $r[ $field[ $where ] ] ) ? absint( $r[ $field[ $where ] ] ) : 0 );
+				// The always-empty «قانون جدید» box is skipped only while nothing at all was chosen in it.
+				if ( ! empty( $r['blank'] ) && '' === $code && ! $id ) {
+					continue;
+				}
+				if ( '' === $code ) {
+					$empty[] = count( $rules ) + 1;
+				}
 				$rules[] = array(
 					'on'    => empty( $r['on'] ) ? 0 : 1,
 					'where' => $where,
-					'id'    => 'tag' === $where ? self::tag_id( isset( $r['tag_name'] ) ? $r['tag_name'] : '' ) : ( isset( $field[ $where ], $r[ $field[ $where ] ] ) ? absint( $r[ $field[ $where ] ] ) : 0 ),
+					'id'    => $id,
 					'scope' => isset( $r['scope'] ) && in_array( $r['scope'], array( 'posts', 'archive', 'both' ), true ) ? $r['scope'] : 'posts',
 					'pos'   => isset( $r['pos'] ) && in_array( $r['pos'], array( 'before', 'after', 'para', 'desc' ), true ) ? $r['pos'] : 'before',
 					'para'  => isset( $r['para'] ) ? max( 1, absint( $r['para'] ) ) : 1,
@@ -99,6 +118,9 @@ class NRY_Admin {
 			}
 			$s['inject'] = $rules;
 			update_option( 'nry_settings', $s );
+			if ( $empty ) {
+				self::back( $tab, 'warning', 'ذخیره شد. قانون ' . nry_fa( implode( '، ', $empty ) ) . ' هنوز چیزی برای نمایش ندارد؛ در بخش «چه چیزی نمایش داده شود» یک ماژول یا «آخرین مطالب» را انتخاب کنید.' );
+			}
 		} elseif ( 'symbols' === $tab ) {
 			$out = array();
 			$raw = isset( $_POST['sym'] ) && is_array( $_POST['sym'] ) ? wp_unslash( $_POST['sym'] ) : array(); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
@@ -416,7 +438,15 @@ class NRY_Admin {
 			$n     = 'rule[' . (int) $i . ']';
 			$blank = ! empty( $r['blank'] );
 			$id    = (int) $r['id'];
-			echo '<div class="nry-rule" data-nry-rule><h2>' . ( $blank ? 'قانون جدید' : 'قانون ' . esc_html( nry_fa( $i + 1 ) ) ) . '</h2><table class="form-table" role="presentation">';
+			$show  = function ( $targets ) use ( $r ) {
+				// Correct fields are visible from the start, even before the page script runs.
+				return in_array( $r['where'], explode( ' ', $targets ), true ) ? '' : ' style="display:none"';
+			};
+			echo '<div class="nry-rule" data-nry-rule><h2>' . ( $blank ? 'قانون جدید' : 'قانون ' . esc_html( nry_fa( $i + 1 ) ) ) . '</h2>' . ( $blank ? '<input type="hidden" name="' . esc_attr( $n ) . '[blank]" value="1">' : '' );
+			if ( ! $blank && '' === trim( $r['code'] ) ) {
+				echo '<div class="notice notice-warning inline"><p>این قانون هنوز چیزی برای نمایش ندارد.</p></div>';
+			}
+			echo '<table class="form-table" role="presentation">';
 			echo '<tr><th scope="row">وضعیت</th><td><label><input type="checkbox" name="' . esc_attr( $n ) . '[on]" value="1"' . checked( 1, (int) $r['on'], false ) . '> فعال</label>';
 			if ( ! $blank ) {
 				echo ' &nbsp; <label><input type="checkbox" name="' . esc_attr( $n ) . '[remove]" value="1"> حذف این قانون</label>';
@@ -428,21 +458,21 @@ class NRY_Admin {
 				echo '<option value="' . esc_attr( $k ) . '"' . selected( $k, $r['where'], false ) . '>' . esc_html( $label ) . '</option>';
 			}
 			echo '</select> ';
-			echo '<span data-nry-target="page"><label class="screen-reader-text" for="nry-pg' . (int) $i . '">برگه</label>';
+			echo '<span data-nry-target="page"' . $show( 'page' ) . '><label class="screen-reader-text" for="nry-pg' . (int) $i . '">برگه</label>';
 			wp_dropdown_pages( array( 'name' => $n . '[page_id]', 'id' => 'nry-pg' . (int) $i, 'selected' => 'page' === $r['where'] ? $id : 0, 'show_option_none' => '— انتخاب برگه —', 'option_none_value' => 0, 'post_status' => array( 'publish', 'draft', 'private' ) ) ); // phpcs:ignore WordPress.Security.EscapeOutput
 			echo '</span>';
-			echo '<span data-nry-target="cat"><label class="screen-reader-text" for="nry-ct' . (int) $i . '">دسته</label>';
+			echo '<span data-nry-target="cat"' . $show( 'cat' ) . '><label class="screen-reader-text" for="nry-ct' . (int) $i . '">دسته</label>';
 			wp_dropdown_categories( array( 'name' => $n . '[cat_id]', 'id' => 'nry-ct' . (int) $i, 'hide_empty' => 0, 'hierarchical' => 1, 'selected' => 'cat' === $r['where'] ? $id : 0, 'show_option_none' => '— انتخاب دسته —', 'option_none_value' => 0 ) );
 			echo '</span>';
-			echo '<span data-nry-target="tag"><label class="screen-reader-text" for="nry-tg' . (int) $i . '">برچسب</label>';
+			echo '<span data-nry-target="tag"' . $show( 'tag' ) . '><label class="screen-reader-text" for="nry-tg' . (int) $i . '">برچسب</label>';
 			self::tag_field( $n . '[tag_name]', 'nry-tg' . (int) $i, 'tag' === $r['where'] ? $id : 0 );
 			echo '</span>';
-			echo '<span data-nry-target="cat tag"> <label class="screen-reader-text" for="nry-sc' . (int) $i . '">در کجای دسته یا برچسب</label><select id="nry-sc' . (int) $i . '" name="' . esc_attr( $n ) . '[scope]">';
+			echo '<span data-nry-target="cat tag"' . $show( 'cat tag' ) . '> <label class="screen-reader-text" for="nry-sc' . (int) $i . '">در کجای دسته یا برچسب</label><select id="nry-sc' . (int) $i . '" name="' . esc_attr( $n ) . '[scope]">';
 			foreach ( array( 'posts' => 'در نوشته‌های آن', 'archive' => 'در صفحه‌ی آرشیو آن', 'both' => 'هم نوشته‌ها و هم صفحه‌ی آرشیو' ) as $k => $label ) {
 				echo '<option value="' . esc_attr( $k ) . '"' . selected( $k, isset( $r['scope'] ) ? $r['scope'] : 'posts', false ) . '>' . esc_html( $label ) . '</option>';
 			}
 			echo '</select></span>';
-			echo '<span data-nry-target="id"><label>شناسه‌ی نوشته: <input type="number" min="0" class="small-text" name="' . esc_attr( $n ) . '[post_id]" value="' . esc_attr( 'id' === $r['where'] ? $id : '' ) . '"></label>';
+			echo '<span data-nry-target="id"' . $show( 'id' ) . '><label>شناسه‌ی نوشته: <input type="number" min="0" class="small-text" name="' . esc_attr( $n ) . '[post_id]" value="' . esc_attr( 'id' === $r['where'] ? $id : '' ) . '"></label>';
 			if ( 'id' === $r['where'] && $id && get_post( $id ) ) {
 				echo ' <span class="description">' . esc_html( get_the_title( $id ) ) . '</span>';
 			}
@@ -456,7 +486,7 @@ class NRY_Admin {
 			echo '<p class="description">در صفحه‌ی آرشیو دسته یا برچسب: «قبل از محتوا» یعنی بالای فهرست نوشته‌ها و «بعد از محتوا» زیر آن. اگر قالب سایت فهرست را جور دیگری می‌سازد، «داخل توضیح آرشیو» را امتحان کنید.</p></td></tr>';
 
 			echo '<tr><th scope="row"><label for="nry-c' . (int) $i . '">چه چیزی نمایش داده شود</label></th><td>';
-			echo '<label class="screen-reader-text" for="nry-add' . (int) $i . '">افزودن ماژول</label><select id="nry-add' . (int) $i . '" data-nry-add><option value="">افزودن ماژول…</option>';
+			echo '<label class="screen-reader-text" for="nry-add' . (int) $i . '">افزودن ماژول</label><select id="nry-add' . (int) $i . '" name="' . esc_attr( $n ) . '[add]" data-nry-add><option value="">افزودن ماژول…</option>';
 			foreach ( NRY_Markets::all() as $mid => $m ) {
 				echo '<optgroup label="' . esc_attr( $m['title'] ) . '">';
 				foreach ( array( 'price_card market="%s" link="auto"' => 'کارت قیمت', 'board market="%s"' => 'تابلوی چهار شاخص', 'table market="%s"' => 'جدول‌ها', 'chart market="%s"' => 'نمودار', 'posts market="%s" count="5"' => 'آخرین مطالب دسته یا برچسب بازار', 'landing market="%s"' => 'کل لندینگ' ) as $code => $label ) {
@@ -465,7 +495,14 @@ class NRY_Admin {
 				echo '</optgroup>';
 			}
 			echo '</select><br><textarea id="nry-c' . (int) $i . '" name="' . esc_attr( $n ) . '[code]" rows="3" class="large-text code" dir="ltr" style="margin-top:6px">' . esc_textarea( $r['code'] ) . '</textarea>';
-			echo '<p class="description">از فهرست بالا انتخاب کنید یا شورت‌کد را دستی بنویسید. برای آخرین مطالب هر برچسب یا دسته‌ی دلخواه: <code dir="ltr">[gn_posts tag="قیمت طلا" count="5"]</code> یا <code dir="ltr">[gn_posts cat="12" count="10"]</code>. قانونی که این کادرش خالی باشد ذخیره نمی‌شود.</p></td></tr>';
+			echo '<p class="description">از فهرست بالا انتخاب کنید یا شورت‌کد را دستی بنویسید.</p></td></tr>';
+			echo '<tr data-nry-posts><th scope="row"><label for="nry-pt' . (int) $i . '">آخرین مطالب</label></th><td><select id="nry-pt' . (int) $i . '" name="' . esc_attr( $n ) . '[posts_type]" data-nry-ptype><option value="">— افزوده نشود —</option><option value="tag">از یک برچسب</option><option value="cat">از یک دسته</option></select> ';
+			echo '<span data-nry-pv="tag" style="display:none">';
+			self::tag_field( $n . '[posts_tag]', 'nry-ptg' . (int) $i, 0 );
+			echo '</span><span data-nry-pv="cat" style="display:none">';
+			wp_dropdown_categories( array( 'name' => $n . '[posts_cat]', 'id' => 'nry-pc' . (int) $i, 'hide_empty' => 0, 'hierarchical' => 1, 'show_option_none' => '— انتخاب دسته —', 'option_none_value' => 0 ) );
+			echo '</span> <label>تعداد: <select name="' . esc_attr( $n ) . '[posts_count]"><option value="5">۵</option><option value="10">۱۰</option></select></label>';
+			echo '<p class="description">فهرست آخرین نوشته‌های آن برچسب یا دسته، همین‌جا و در همان جایگاه نمایش داده می‌شود. بعد از ذخیره به شکل <code dir="ltr">[gn_posts …]</code> در کادر بالا می‌آید و می‌توانید جابه‌جا یا حذفش کنید.</p></td></tr>';
 			echo '</table></div>';
 		}
 		submit_button( 'ذخیره' );
@@ -481,6 +518,12 @@ class NRY_Admin {
 			};
 			where.addEventListener('change', sync);
 			sync();
+			var pt = rule.querySelector('[data-nry-ptype]');
+			var psync = function () {
+				rule.querySelectorAll('[data-nry-pv]').forEach(function (e) { e.style.display = e.getAttribute('data-nry-pv') === pt.value ? '' : 'none'; });
+			};
+			pt.addEventListener('change', psync);
+			psync();
 			var add = rule.querySelector('[data-nry-add]'), code = rule.querySelector('textarea');
 			add.addEventListener('change', function () {
 				if (add.value) { code.value = (code.value.trim() ? code.value.trim() + '\n' : '') + add.value; add.value = ''; }
