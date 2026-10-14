@@ -123,9 +123,23 @@ class NRY_Shortcodes {
 
 	/** [gn_posts market="gold" count="5"] — latest posts of the category or tag linked to the market. */
 	public static function posts( $atts ) {
-		$atts = shortcode_atts( array( 'market' => 'gold', 'count' => 0 ), $atts, 'gn_posts' );
+		$atts = shortcode_atts( array( 'market' => 'gold', 'count' => 0, 'tag' => '', 'cat' => '', 'title' => '' ), $atts, 'gn_posts' );
 		NRY_Render::assets();
+		if ( '' !== $atts['tag'] || '' !== $atts['cat'] ) {
+			// Any tag or category: by ID, slug or name.
+			$tax  = '' !== $atts['tag'] ? 'post_tag' : 'category';
+			$ref  = trim( '' !== $atts['tag'] ? $atts['tag'] : $atts['cat'] );
+			$term = ctype_digit( $ref ) ? get_term( (int) $ref, $tax ) : ( get_term_by( 'slug', sanitize_title( $ref ), $tax ) ?: get_term_by( 'name', $ref, $tax ) );
+			if ( ! $term || is_wp_error( $term ) ) {
+				return '';
+			}
+			$m = array( 'posts_tax' => $tax, 'posts_term' => (int) $term->term_id, 'posts_count' => 5, 'posts_title' => '' !== $atts['title'] ? $atts['title'] : 'آخرین مطالب ' . $term->name, 'label' => $term->name );
+			return NRY_Render::posts( $m, (int) $atts['count'] );
+		}
 		$m = self::market( $atts );
+		if ( $m && '' !== $atts['title'] ) {
+			$m['posts_title'] = $atts['title'];
+		}
 		return $m ? NRY_Render::posts( $m, (int) $atts['count'] ) : '';
 	}
 

@@ -15,6 +15,7 @@ class NRY_Admin {
 		add_action( 'admin_post_nry_market_save', array( __CLASS__, 'market_save' ) );
 		add_action( 'admin_post_nry_market_delete', array( __CLASS__, 'market_delete' ) );
 		add_action( 'admin_post_nry_page_editable', array( __CLASS__, 'page_editable' ) );
+		add_action( 'wp_ajax_nry_tags', array( __CLASS__, 'tag_search' ) );
 	}
 
 	public static function menu() {
@@ -89,7 +90,7 @@ class NRY_Admin {
 				$rules[] = array(
 					'on'    => empty( $r['on'] ) ? 0 : 1,
 					'where' => $where,
-					'id'    => isset( $field[ $where ], $r[ $field[ $where ] ] ) ? absint( $r[ $field[ $where ] ] ) : 0,
+					'id'    => 'tag' === $where ? self::tag_id( isset( $r['tag_name'] ) ? $r['tag_name'] : '' ) : ( isset( $field[ $where ], $r[ $field[ $where ] ] ) ? absint( $r[ $field[ $where ] ] ) : 0 ),
 					'scope' => isset( $r['scope'] ) && in_array( $r['scope'], array( 'posts', 'archive', 'both' ), true ) ? $r['scope'] : 'posts',
 					'pos'   => isset( $r['pos'] ) && in_array( $r['pos'], array( 'before', 'after', 'para', 'desc' ), true ) ? $r['pos'] : 'before',
 					'para'  => isset( $r['para'] ) ? max( 1, absint( $r['para'] ) ) : 1,
@@ -153,7 +154,7 @@ class NRY_Admin {
 				$ids  = array( 'cat' => 'cat_id', 'tag' => 'tag_id', 'post' => 'post_id' );
 				$targets[ sanitize_key( $market ) ] = array(
 					'type' => $type,
-					'id'   => isset( $ids[ $type ], $t[ $ids[ $type ] ] ) ? absint( $t[ $ids[ $type ] ] ) : 0,
+					'id'   => 'tag' === $type ? self::tag_id( isset( $t['tag_name'] ) ? $t['tag_name'] : '' ) : ( isset( $ids[ $type ], $t[ $ids[ $type ] ] ) ? absint( $t[ $ids[ $type ] ] ) : 0 ),
 					'url'  => 'url' === $type && isset( $t['url'] ) ? esc_url_raw( $t['url'] ) : '',
 				);
 			}
@@ -242,6 +243,53 @@ class NRY_Admin {
 		}
 		wp_update_post( array( 'ID' => $id, 'post_content' => NRY_Pages::editable_content( $mid, $page->post_title ) ) );
 		self::back( 'pages', 'success', 'متن برگه‌ی «' . $page->post_title . '» حالا در ویرایشگر وردپرس قابل ویرایش است.' );
+	}
+
+	/**
+	 * Tag picker: a text box with suggestions loaded while typing.
+	 * A full dropdown would list every tag of the site, which on a news site is tens of thousands.
+	 */
+	private static function tag_field( $name, $id, $term_id ) {
+		static $printed = false;
+		$term = $term_id ? get_term( (int) $term_id, 'post_tag' ) : null;
+		$val  = $term && ! is_wp_error( $term ) ? $term->name : '';
+		echo '<input type="text" id="' . esc_attr( $id ) . '" name="' . esc_attr( $name ) . '" value="' . esc_attr( $val ) . '" class="regular-text" list="nry-tag-list" autocomplete="off" placeholder="نام برچسب را بنویسید…" data-nry-tag>';
+		if ( $printed ) {
+			return;
+		}
+		$printed = true;
+		// Plain URL for script use (wp_nonce_url() would encode & as &amp;).
+		$url     = admin_url( 'admin-ajax.php?action=nry_tags&_wpnonce=' . wp_create_nonce( 'nry_tags' ) );
+		echo '<datalist id="nry-tag-list"></datalist>';
+		echo "<script>(function(){var list=document.getElementById('nry-tag-list'),t=null,url=" . wp_json_encode( $url ) . ";document.addEventListener('input',function(e){var f=e.target;if(!f.hasAttribute||!f.hasAttribute('data-nry-tag')){return;}clearTimeout(t);var q=f.value.trim();if(q.length<2){return;}t=setTimeout(function(){fetch(url+'&q='+encodeURIComponent(q),{credentials:'same-origin'}).then(function(r){return r.json();}).then(function(names){list.innerHTML='';(names||[]).forEach(function(n){var o=document.createElement('option');o.value=n;list.appendChild(o);});}).catch(function(){});},250);});})();</script>";
+	}
+
+	/** Up to 20 tag names matching what was typed. */
+	public static function tag_search() {
+		if ( ! current_user_can( 'manage_options' ) || ! check_ajax_referer( 'nry_tags', '_wpnonce', false ) ) {
+			wp_send_json( array() );
+		}
+		$q     = isset( $_GET['q'] ) ? sanitize_text_field( wp_unslash( $_GET['q'] ) ) : '';
+		$names = get_terms( array( 'taxonomy' => 'post_tag', 'hide_empty' => false, 'search' => $q, 'number' => 20, 'fields' => 'names', 'orderby' => 'count', 'order' => 'DESC' ) );
+		wp_send_json( is_wp_error( $names ) ? array() : array_values( $names ) );
+	}
+
+	/** Tag typed by name (or slug, or ID) to its ID; 0 when no such tag exists. */
+	private static function tag_id( $text ) {
+		$text = trim( sanitize_text_field( (string) $text ) );
+		if ( '' === $text ) {
+			return 0;
+		}
+		if ( ctype_digit( $text ) && get_term( (int) $text, 'post_tag' ) ) {
+			return (int) $text;
+		}
+		foreach ( array( 'name', 'slug' ) as $by ) {
+			$term = get_term_by( $by, 'name' === $by ? $text : sanitize_title( $text ), 'post_tag' );
+			if ( $term ) {
+				return (int) $term->term_id;
+			}
+		}
+		return 0;
 	}
 
 	/* ---------- screens ---------- */
@@ -387,7 +435,7 @@ class NRY_Admin {
 			wp_dropdown_categories( array( 'name' => $n . '[cat_id]', 'id' => 'nry-ct' . (int) $i, 'hide_empty' => 0, 'hierarchical' => 1, 'selected' => 'cat' === $r['where'] ? $id : 0, 'show_option_none' => '— انتخاب دسته —', 'option_none_value' => 0 ) );
 			echo '</span>';
 			echo '<span data-nry-target="tag"><label class="screen-reader-text" for="nry-tg' . (int) $i . '">برچسب</label>';
-			wp_dropdown_categories( array( 'taxonomy' => 'post_tag', 'name' => $n . '[tag_id]', 'id' => 'nry-tg' . (int) $i, 'hide_empty' => 0, 'orderby' => 'name', 'selected' => 'tag' === $r['where'] ? $id : 0, 'show_option_none' => '— انتخاب برچسب —', 'option_none_value' => 0 ) );
+			self::tag_field( $n . '[tag_name]', 'nry-tg' . (int) $i, 'tag' === $r['where'] ? $id : 0 );
 			echo '</span>';
 			echo '<span data-nry-target="cat tag"> <label class="screen-reader-text" for="nry-sc' . (int) $i . '">در کجای دسته یا برچسب</label><select id="nry-sc' . (int) $i . '" name="' . esc_attr( $n ) . '[scope]">';
 			foreach ( array( 'posts' => 'در نوشته‌های آن', 'archive' => 'در صفحه‌ی آرشیو آن', 'both' => 'هم نوشته‌ها و هم صفحه‌ی آرشیو' ) as $k => $label ) {
@@ -411,13 +459,13 @@ class NRY_Admin {
 			echo '<label class="screen-reader-text" for="nry-add' . (int) $i . '">افزودن ماژول</label><select id="nry-add' . (int) $i . '" data-nry-add><option value="">افزودن ماژول…</option>';
 			foreach ( NRY_Markets::all() as $mid => $m ) {
 				echo '<optgroup label="' . esc_attr( $m['title'] ) . '">';
-				foreach ( array( 'price_card market="%s" link="auto"' => 'کارت قیمت', 'board market="%s"' => 'تابلوی چهار شاخص', 'table market="%s"' => 'جدول‌ها', 'chart market="%s"' => 'نمودار', 'landing market="%s"' => 'کل لندینگ' ) as $code => $label ) {
+				foreach ( array( 'price_card market="%s" link="auto"' => 'کارت قیمت', 'board market="%s"' => 'تابلوی چهار شاخص', 'table market="%s"' => 'جدول‌ها', 'chart market="%s"' => 'نمودار', 'posts market="%s" count="5"' => 'آخرین مطالب دسته یا برچسب بازار', 'landing market="%s"' => 'کل لندینگ' ) as $code => $label ) {
 					echo '<option value="' . esc_attr( '[gn_' . sprintf( $code, $mid ) . ']' ) . '">' . esc_html( $label ) . '</option>';
 				}
 				echo '</optgroup>';
 			}
 			echo '</select><br><textarea id="nry-c' . (int) $i . '" name="' . esc_attr( $n ) . '[code]" rows="3" class="large-text code" dir="ltr" style="margin-top:6px">' . esc_textarea( $r['code'] ) . '</textarea>';
-			echo '<p class="description">از فهرست بالا انتخاب کنید یا شورت‌کد را دستی بنویسید. قانونی که این کادرش خالی باشد ذخیره نمی‌شود.</p></td></tr>';
+			echo '<p class="description">از فهرست بالا انتخاب کنید یا شورت‌کد را دستی بنویسید. برای آخرین مطالب هر برچسب یا دسته‌ی دلخواه: <code dir="ltr">[gn_posts tag="قیمت طلا" count="5"]</code> یا <code dir="ltr">[gn_posts cat="12" count="10"]</code>. قانونی که این کادرش خالی باشد ذخیره نمی‌شود.</p></td></tr>';
 			echo '</table></div>';
 		}
 		submit_button( 'ذخیره' );
@@ -481,7 +529,7 @@ class NRY_Admin {
 		}
 		$o['tables'] = $tables;
 		$o['posts_tax']   = in_array( $t( 'posts_tax' ), array( 'category', 'post_tag' ), true ) ? $t( 'posts_tax' ) : '';
-		$o['posts_term']  = 'category' === $o['posts_tax'] ? absint( $t( 'posts_cat' ) ) : ( 'post_tag' === $o['posts_tax'] ? absint( $t( 'posts_tag' ) ) : 0 );
+		$o['posts_term']  = 'category' === $o['posts_tax'] ? absint( $t( 'posts_cat' ) ) : ( 'post_tag' === $o['posts_tax'] ? self::tag_id( $t( 'posts_tag_name' ) ) : 0 );
 		$o['posts_count'] = min( 20, max( 1, absint( $t( 'posts_count' ) ) ) );
 		$o['posts_title'] = $t( 'posts_title' );
 		if ( '' === $o['label'] ) {
@@ -598,7 +646,7 @@ class NRY_Admin {
 		echo '</select> <span data-nry-pt="category">';
 		wp_dropdown_categories( array( 'name' => 'm[posts_cat]', 'id' => 'nry-mf-pcat', 'hide_empty' => 0, 'hierarchical' => 1, 'selected' => 'category' === $m['posts_tax'] ? (int) $m['posts_term'] : 0, 'show_option_none' => '— انتخاب دسته —', 'option_none_value' => 0 ) );
 		echo '</span><span data-nry-pt="post_tag">';
-		wp_dropdown_categories( array( 'taxonomy' => 'post_tag', 'name' => 'm[posts_tag]', 'id' => 'nry-mf-ptag', 'hide_empty' => 0, 'orderby' => 'name', 'selected' => 'post_tag' === $m['posts_tax'] ? (int) $m['posts_term'] : 0, 'show_option_none' => '— انتخاب برچسب —', 'option_none_value' => 0 ) );
+		self::tag_field( 'm[posts_tag_name]', 'nry-mf-ptag', 'post_tag' === $m['posts_tax'] ? (int) $m['posts_term'] : 0 );
 		echo '</span></td></tr>';
 		echo '<tr><th scope="row"><label for="nry-mf-pcount">تعداد</label></th><td><select id="nry-mf-pcount" name="m[posts_count]">';
 		foreach ( array( 5, 10 ) as $c ) {
@@ -669,7 +717,7 @@ class NRY_Admin {
 			echo '</select> <span data-nry-lv="cat">';
 			wp_dropdown_categories( array( 'name' => $n . '[cat_id]', 'id' => 'nry-lc-' . $id, 'hide_empty' => 0, 'hierarchical' => 1, 'selected' => 'cat' === $t['type'] ? (int) $t['id'] : 0, 'show_option_none' => '— انتخاب دسته —', 'option_none_value' => 0 ) );
 			echo '</span><span data-nry-lv="tag">';
-			wp_dropdown_categories( array( 'taxonomy' => 'post_tag', 'name' => $n . '[tag_id]', 'id' => 'nry-lg-' . $id, 'hide_empty' => 0, 'orderby' => 'name', 'selected' => 'tag' === $t['type'] ? (int) $t['id'] : 0, 'show_option_none' => '— انتخاب برچسب —', 'option_none_value' => 0 ) );
+			self::tag_field( $n . '[tag_name]', 'nry-lg-' . $id, 'tag' === $t['type'] ? (int) $t['id'] : 0 );
 			echo '</span><span data-nry-lv="post">';
 			wp_dropdown_pages( array( 'name' => $n . '[post_id]', 'id' => 'nry-lp-' . $id, 'selected' => 'post' === $t['type'] ? (int) $t['id'] : 0, 'show_option_none' => '— انتخاب برگه —', 'option_none_value' => 0 ) ); // phpcs:ignore WordPress.Security.EscapeOutput
 			echo '</span><span data-nry-lv="url"><input type="url" class="regular-text" dir="ltr" name="' . esc_attr( $n ) . '[url]" value="' . esc_attr( $t['url'] ) . '" placeholder="https://"></span></p>';
@@ -772,7 +820,7 @@ class NRY_Admin {
 			'[gn_calculator type="gold"]'                => 'ماشین‌حساب طلا. با type="fx" مبدل ارز.',
 			'[gn_guide market="gold"]'                   => 'متن راهنمای بازار.',
 			'[gn_faq market="gold"]'                     => 'پرسش‌های پرتکرار، همراه با اسکیمای FAQPage. با پرسش‌های خودتان: [gn_faq title="…"]پرسش | پاسخ[/gn_faq]، هر پرسش در یک سطر.',
-			'[gn_posts market="gold" count="5"]'         => 'آخرین نوشته‌های دسته یا برچسبی که در تنظیمات بازار انتخاب شده.',
+			'[gn_posts market="gold" count="5"]'         => 'آخرین نوشته‌های دسته یا برچسبی که در تنظیمات بازار انتخاب شده. یا هر برچسب و دسته‌ی دلخواه: tag="قیمت طلا" یا cat="12"، با title="…" برای تیتر.',
 			'[gn_landing market="gold" title="…" lead="…"]…[/gn_landing]' => 'لندینگ با عنوان و توضیح دلخواه؛ متنی که بین دو شورت‌کد بنویسید جای راهنما و پرسش‌های پیش‌فرض می‌آید.',
 		);
 		echo '<table class="widefat striped" style="margin-top:16px"><thead><tr><th>شورت‌کد</th><th>خروجی</th></tr></thead><tbody>';

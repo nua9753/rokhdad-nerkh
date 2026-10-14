@@ -14,6 +14,7 @@ class NRY_Pages {
 		add_filter( 'body_class', array( __CLASS__, 'body_class' ) );
 		add_filter( 'the_content', array( __CLASS__, 'inject' ), 12 );
 		add_action( 'wp', array( __CLASS__, 'early_assets' ) );
+		add_action( 'admin_init', array( __CLASS__, 'repair_pages' ) );
 		add_action( 'loop_start', array( __CLASS__, 'archive_top' ) );
 		add_action( 'loop_end', array( __CLASS__, 'archive_bottom' ) );
 		add_filter( 'get_the_archive_description', array( __CLASS__, 'archive_desc' ) );
@@ -90,24 +91,83 @@ class NRY_Pages {
 		if ( '' !== trim( (string) $m['guide_title'] ) ) {
 			$out .= "<!-- wp:heading -->\n<h2 class=\"wp-block-heading\">" . esc_html( $m['guide_title'] ) . "</h2>\n<!-- /wp:heading -->\n\n";
 		}
-		$guide = (string) $m['guide'];
-		if ( preg_match_all( '/<(p|h3)\b[^>]*>(.*?)<\/\1>|<(div|ul|ol|table|figure)\b.*?<\/\3>/s', $guide, $found, PREG_SET_ORDER ) ) {
-			foreach ( $found as $f ) {
-				if ( 'p' === $f[1] ) {
-					$out .= "<!-- wp:paragraph -->\n<p>" . $f[2] . "</p>\n<!-- /wp:paragraph -->\n\n";
-				} elseif ( 'h3' === $f[1] ) {
-					$out .= "<!-- wp:heading {\"level\":3} -->\n<h3 class=\"wp-block-heading\">" . $f[2] . "</h3>\n<!-- /wp:heading -->\n\n";
-				} else {
-					$out .= "<!-- wp:html -->\n" . $f[0] . "\n<!-- /wp:html -->\n\n";
-				}
-			}
-		} elseif ( '' !== trim( $guide ) ) {
-			$out .= "<!-- wp:html -->\n" . $guide . "\n<!-- /wp:html -->\n\n";
-		}
+		$out .= self::guide_blocks( (string) $m['guide'] );
 		if ( ! empty( $m['faq'] ) ) {
 			$out .= '<!-- wp:shortcode -->[gn_faq market="' . $mid . '" title="' . self::attr( $m['faq_title'] ) . "\"]\n" . NRY_Markets::faq_text( $m['faq'] ) . "\n[/gn_faq]<!-- /wp:shortcode -->\n\n";
 		}
 		return $out . '<!-- wp:shortcode -->[/gn_landing]<!-- /wp:shortcode -->';
+	}
+
+	/** Guide HTML as editor blocks, one block per top-level element, so nested boxes stay whole. */
+	public static function guide_blocks( $guide ) {
+		if ( '' === trim( $guide ) ) {
+			return '';
+		}
+		$doc = new DOMDocument();
+		$old = libxml_use_internal_errors( true );
+		$doc->loadHTML( '<?xml encoding="utf-8"?><div id="nry-root">' . $guide . '</div>', LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD );
+		libxml_clear_errors();
+		libxml_use_internal_errors( $old );
+		$root = $doc->getElementById( 'nry-root' );
+		if ( ! $root ) {
+			return "<!-- wp:html -->\n" . $guide . "\n<!-- /wp:html -->\n\n";
+		}
+		$out = '';
+		foreach ( $root->childNodes as $node ) {
+			if ( XML_ELEMENT_NODE !== $node->nodeType ) {
+				if ( '' !== trim( $node->textContent ) ) {
+					$out .= "<!-- wp:paragraph -->\n<p>" . esc_html( trim( $node->textContent ) ) . "</p>\n<!-- /wp:paragraph -->\n\n";
+				}
+				continue;
+			}
+			$html  = $doc->saveHTML( $node );
+			$tag   = strtolower( $node->nodeName );
+			$class = trim( (string) $node->getAttribute( 'class' ) );
+			$attrs = $class ? ' ' . wp_json_encode( array( 'className' => $class ) ) : '';
+			if ( 'p' === $tag ) {
+				$out .= '<!-- wp:paragraph' . $attrs . " -->\n" . $html . "\n<!-- /wp:paragraph -->\n\n";
+			} elseif ( in_array( $tag, array( 'h2', 'h3', 'h4' ), true ) ) {
+				$level = (int) substr( $tag, 1 );
+				$html  = preg_replace( '/^<' . $tag . '(\s[^>]*)?>/', '<' . $tag . ' class="wp-block-heading' . ( $class ? ' ' . esc_attr( $class ) : '' ) . '">', $html );
+				$out  .= '<!-- wp:heading ' . wp_json_encode( array( 'level' => $level ) ) . " -->\n" . $html . "\n<!-- /wp:heading -->\n\n";
+			} else {
+				$out .= "<!-- wp:html -->\n" . $html . "\n<!-- /wp:html -->\n\n";
+			}
+		}
+		return $out;
+	}
+
+	/**
+	 * Pages built by 0.6 and 0.7.0 cut the facts box into several blocks and dropped its closing tag,
+	 * so the rest of the page fell into its columns; the formula box also lost its class. Fixed in place,
+	 * once, without touching anything else written on the page.
+	 */
+	public static function repair_pages() {
+		if ( get_option( 'nry_repair_071' ) ) {
+			return;
+		}
+		update_option( 'nry_repair_071', 1, false );
+		foreach ( self::landing_pages() as $page ) {
+			$c = (string) $page->post_content;
+			$n = $c;
+			// Consecutive HTML blocks whose divs do not balance are joined and closed.
+			$n = preg_replace_callback(
+				'/<!-- wp:html -->\n(<div class="nry-facts">.*?)<!-- \/wp:html -->\n\n((?:<!-- wp:html -->\n<div><b>.*?<!-- \/wp:html -->\n\n)*)/s',
+				function ( $mm ) {
+					$inner = trim( $mm[1] );
+					if ( preg_match_all( '/<!-- wp:html -->\n(.*?)\n<!-- \/wp:html -->/s', $mm[2], $more ) ) {
+						$inner .= implode( '', $more[1] );
+					}
+					$missing = substr_count( $inner, '<div' ) - substr_count( $inner, '</div>' );
+					return "<!-- wp:html -->\n" . $inner . str_repeat( '</div>', max( 0, $missing ) ) . "\n<!-- /wp:html -->\n\n";
+				},
+				$n
+			);
+			$n = str_replace( "<!-- wp:paragraph -->\n<p><mark>", "<!-- wp:paragraph {\"className\":\"nry-formula\"} -->\n<p class=\"nry-formula\"><mark>", $n );
+			if ( $n !== $c ) {
+				wp_update_post( array( 'ID' => $page->ID, 'post_content' => $n ) );
+			}
+		}
 	}
 
 	/** True when a page still holds only the old single landing shortcode. */
