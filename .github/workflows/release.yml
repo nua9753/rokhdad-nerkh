@@ -1,0 +1,26 @@
+# Push a tag like v0.7.1 and this builds rokhdad-nerkh.zip and publishes it as a Release.
+# Every site with the plugin then sees the update in Dashboard → Updates.
+name: Release
+on:
+  push:
+    tags: ['v*']
+permissions:
+  contents: write
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Version in rokhdad-nerkh.php must match the tag
+        run: |
+          v=$(grep -m1 "Version:" rokhdad-nerkh.php | awk '{print $NF}')
+          if [ "v$v" != "$GITHUB_REF_NAME" ]; then echo "Version $v does not match tag $GITHUB_REF_NAME"; exit 1; fi
+      - name: Build zip
+        run: |
+          mkdir -p dist/rokhdad-nerkh
+          rsync -a --exclude '.git*' --exclude '.github' --exclude 'dist' --exclude 'README.md' ./ dist/rokhdad-nerkh/
+          cd dist && zip -qr rokhdad-nerkh.zip rokhdad-nerkh
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/rokhdad-nerkh.zip
+          generate_release_notes: true
