@@ -1,9 +1,15 @@
-# Push a tag like v0.7.1 and this builds rokhdad-nerkh.zip and publishes it as a Release.
-# Every site with the plugin then sees the update in Dashboard → Updates.
+# When the Version in rokhdad-nerkh.php changes on main, this builds rokhdad-nerkh.zip
+# and publishes it as Release v<version>. Every site with the plugin then sees the update
+# in Dashboard → Updates (and installs it itself when auto-updates are on).
 name: Release
 on:
   push:
-    tags: ['v*']
+    branches: [main]
+    paths:
+      - 'rokhdad-nerkh.php'
+      - 'release-notes.md'
+      - '.github/workflows/release.yml'
+  workflow_dispatch:
 permissions:
   contents: write
 jobs:
@@ -11,16 +17,35 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Version in rokhdad-nerkh.php must match the tag
+      - name: Read version
+        id: v
         run: |
           v=$(grep -m1 "Version:" rokhdad-nerkh.php | awk '{print $NF}')
-          if [ "v$v" != "$GITHUB_REF_NAME" ]; then echo "Version $v does not match tag $GITHUB_REF_NAME"; exit 1; fi
+          c=$(grep -m1 "define( 'NRY_VER'" rokhdad-nerkh.php | sed -E "s/.*'([0-9.]+)'.*/\1/")
+          if [ "$v" != "$c" ]; then echo "Header Version $v and NRY_VER $c differ"; exit 1; fi
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+      - name: Skip if this version is already released
+        id: exists
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "v${{ steps.v.outputs.version }}" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "found=1" >> "$GITHUB_OUTPUT"
+          else
+            echo "found=0" >> "$GITHUB_OUTPUT"
+          fi
       - name: Build zip
+        if: steps.exists.outputs.found == '0'
         run: |
           mkdir -p dist/rokhdad-nerkh
-          rsync -a --exclude '.git*' --exclude '.github' --exclude 'dist' --exclude 'README.md' ./ dist/rokhdad-nerkh/
+          rsync -a --exclude '.git*' --exclude '.github' --exclude 'dist' --exclude 'README.md' --exclude 'release-notes.md' ./ dist/rokhdad-nerkh/
           cd dist && zip -qr rokhdad-nerkh.zip rokhdad-nerkh
-      - uses: softprops/action-gh-release@v2
+      - name: Publish release
+        if: steps.exists.outputs.found == '0'
+        uses: softprops/action-gh-release@v2
         with:
+          tag_name: v${{ steps.v.outputs.version }}
+          target_commitish: ${{ github.sha }}
+          name: رخداد نرخ ${{ steps.v.outputs.version }}
+          body_path: release-notes.md
           files: dist/rokhdad-nerkh.zip
-          generate_release_notes: true
