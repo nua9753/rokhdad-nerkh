@@ -190,6 +190,24 @@ class NRY_Admin {
 				}
 			}
 			$s['daily_bodies'] = $bodies;
+			$dtags             = array();
+			$raw               = isset( $_POST['daily_tags'] ) && is_array( $_POST['daily_tags'] ) ? wp_unslash( $_POST['daily_tags'] ) : array(); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
+			foreach ( $raw as $market => $v ) {
+				$v = implode( '، ', NRY_Markets::split( sanitize_text_field( $v ) ) );
+				if ( '' !== $v ) {
+					$dtags[ sanitize_key( $market ) ] = $v;
+				}
+			}
+			$s['daily_tags'] = $dtags;
+			$ex              = array();
+			$raw             = isset( $_POST['daily_excerpts'] ) && is_array( $_POST['daily_excerpts'] ) ? wp_unslash( $_POST['daily_excerpts'] ) : array(); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
+			foreach ( $raw as $market => $v ) {
+				$lines = array_slice( array_values( array_filter( array_map( 'trim', preg_split( '/\R/u', sanitize_textarea_field( $v ) ) ) ) ), 0, 10 );
+				if ( $lines ) {
+					$ex[ sanitize_key( $market ) ] = $lines;
+				}
+			}
+			$s['daily_excerpts'] = $ex;
 			$s['daily_on']       = empty( $_POST['daily_on'] ) ? 0 : 1;
 			$s['daily_hour']     = min( 23, max( 0, isset( $_POST['daily_hour'] ) ? (int) $_POST['daily_hour'] : 11 ) );
 			$s['daily_cat']      = isset( $_POST['daily_cat'] ) ? absint( $_POST['daily_cat'] ) : 0;
@@ -792,6 +810,19 @@ class NRY_Admin {
 			echo '<li>' . esc_html( nry_fill( $tpl, NRY_Seo::vars( 'gold' ) ) ) . '</li>';
 		}
 		echo '</ol><p class="description">متغیرهای اضافه: <code dir="ltr">{label}</code> نام کوتاه بازار، <code dir="ltr">{move}</code> افزایش/کاهش/ثبات.</p></td></tr>';
+		$dtags = (array) nry_opt( 'daily_tags', array() );
+		$dex   = (array) nry_opt( 'daily_excerpts', array() );
+		echo '<tr><th scope="row">برچسب‌های ثابت</th><td>';
+		foreach ( NRY_Markets::all() as $id => $m ) {
+			echo '<p><label for="nry-dtag-' . esc_attr( $id ) . '" style="display:inline-block;min-width:110px">' . esc_html( $m['label'] ) . '</label> <input id="nry-dtag-' . esc_attr( $id ) . '" type="text" class="regular-text" name="daily_tags[' . esc_attr( $id ) . ']" value="' . esc_attr( isset( $dtags[ $id ] ) ? $dtags[ $id ] : '' ) . '" placeholder="قیمت طلا، قیمت سکه، بازار طلا"></p>';
+		}
+		echo '<p class="description">این برچسب‌ها به هر نوشته‌ی روزانه‌ی همان بازار زده می‌شوند. چند برچسب را با ویرگول جدا کنید؛ برچسبی که هنوز در سایت نیست ساخته می‌شود.</p></td></tr>';
+		$exdefs = NRY_Daily::default_excerpts();
+		echo '<tr><th scope="row">چکیده‌ها</th><td><p class="description" style="margin-top:0">هر نوشته‌ی روزانه یک چکیده می‌گیرد که به‌صورت تصادفی از این فهرست انتخاب می‌شود و هیچ‌وقت با چکیده‌ی نوشته‌ی قبلی همان بازار یکی نیست. هر سطر یک چکیده (تا ۱۰ سطر)؛ متغیرهای عنوان اینجا هم کار می‌کنند. خالی بماند، پنج چکیده‌ی پیش‌فرض (متن کم‌رنگ) استفاده می‌شود.</p>';
+		foreach ( NRY_Markets::all() as $id => $m ) {
+			echo '<p><label for="nry-dex-' . esc_attr( $id ) . '"><strong>' . esc_html( $m['label'] ) . '</strong></label><br><textarea id="nry-dex-' . esc_attr( $id ) . '" name="daily_excerpts[' . esc_attr( $id ) . ']" rows="5" class="large-text" placeholder="' . esc_attr( implode( "\n", $exdefs ) ) . '">' . esc_textarea( isset( $dex[ $id ] ) ? implode( "\n", (array) $dex[ $id ] ) : '' ) . '</textarea></p>';
+		}
+		echo '</td></tr>';
 		$bodies = (array) nry_opt( 'daily_bodies', array() );
 		$defs   = NRY_Daily::default_bodies();
 		echo '<tr><th scope="row">الگوهای متن نوشته</th><td><p class="description" style="margin-top:0">برای هر بازار تا پنج الگو. هر روز الگوی بعدی استفاده می‌شود و جمله‌های خلاصه هم هر روز با یکی از پنج بیان متفاوت نوشته می‌شوند تا نوشته‌ها تکراری به نظر نرسند. خط خالی یعنی پاراگراف تازه. اگر برای بازاری هیچ الگویی ننویسید، پنج الگوی پیش‌فرض (متن کم‌رنگ داخل کادرها) استفاده می‌شود.</p>';

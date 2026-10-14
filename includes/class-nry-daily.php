@@ -327,6 +327,38 @@ class NRY_Daily {
 		return (array) apply_filters( 'nry_daily_analysis', $out, $market_id );
 	}
 
+	/** Built-in excerpts; one is picked at random for each post. */
+	public static function default_excerpts() {
+		return array(
+			'{name} امروز {weekday} {date_long} به {price} {unit} رسید. جدول کامل قیمت‌ها و تغییرات روز را در این گزارش ببینید.',
+			'قیمت {label} امروز {date_long}: {name} با {move} به {price} {unit} رسید. جزئیات و جدول قیمت‌ها را در ادامه بخوانید.',
+			'آخرین قیمت {name} در ساعت {time} امروز {date_long}، {price} {unit} است. سایر قیمت‌های بازار را در جدول این گزارش ببینید.',
+			'{name} چند شد؟ قیمت امروز {weekday} {date_long} {price} {unit} است؛ {move} نسبت به روز قبل.',
+			'گزارش {title} {date_long}؛ {name} {price} {unit}، همراه با جدول کامل و روند قیمت در روزهای اخیر.',
+		);
+	}
+
+	public static function excerpts( $market_id ) {
+		$all  = (array) nry_opt( 'daily_excerpts', array() );
+		$mine = isset( $all[ $market_id ] ) ? array_values( array_filter( array_map( 'trim', (array) $all[ $market_id ] ) ) ) : array();
+		return $mine ? $mine : self::default_excerpts();
+	}
+
+	/** A random excerpt, never the same one as the market's previous post. */
+	private static function random_excerpt( $market_id, $vars ) {
+		$list = self::excerpts( $market_id );
+		$last = get_option( 'nry_excerpt_last', array() );
+		$last = is_array( $last ) ? $last : array();
+		$keys = array_keys( $list );
+		if ( count( $keys ) > 1 && isset( $last[ $market_id ] ) ) {
+			$keys = array_values( array_diff( $keys, array( (int) $last[ $market_id ] ) ) );
+		}
+		$i                   = $keys[ wp_rand( 0, count( $keys ) - 1 ) ];
+		$last[ $market_id ] = $i;
+		update_option( 'nry_excerpt_last', $last, false );
+		return nry_fill( $list[ $i ], $vars + array( 'label' => '' ) );
+	}
+
 	/** Next body template in the rotation, and the turn number that also picks the sentence phrasings. */
 	private static function next_body( $market_id ) {
 		$bodies = self::bodies( $market_id );
@@ -448,6 +480,7 @@ class NRY_Daily {
 				'post_type'    => 'post',
 				'post_title'   => $title,
 				'post_content' => $content,
+				'post_excerpt' => self::random_excerpt( $market_id, $vars ),
 				'post_author'  => get_current_user_id() ? get_current_user_id() : ( $admins ? (int) $admins[0] : 0 ),
 			),
 			self::publish_fields()
@@ -455,6 +488,11 @@ class NRY_Daily {
 		$cat    = (int) nry_opt( 'daily_cat', 0 );
 		if ( $cat ) {
 			$post['post_category'] = array( $cat );
+		}
+		// Fixed tags of this market; tags that do not exist yet are created.
+		$tags = (array) nry_opt( 'daily_tags', array() );
+		if ( ! empty( $tags[ $market_id ] ) ) {
+			$post['tags_input'] = NRY_Markets::split( $tags[ $market_id ] );
 		}
 		$id = wp_insert_post( $post, true );
 		if ( is_wp_error( $id ) ) {
