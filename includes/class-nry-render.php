@@ -185,7 +185,7 @@ class NRY_Render {
 		if ( 'fx' === $type ) {
 			return self::calc_fx( $u );
 		}
-		$item  = NRY_Api::one( $market && ! empty( $market['main'] ) ? $market['main'] : 'IR_GOLD_18K' );
+		$item  = NRY_Api::one( $market && ! empty( $market['main'] ) ? $market['main'] : 'GOLD18K' );
 		$price = $item ? NRY_Api::display( $item ) : null;
 		$p     = $price ? nry_num( round( $price['price'] ), 0 ) : '';
 

@@ -20,3 +20,5 @@ delete_option( 'nry_body_idx' );
 delete_site_transient( 'nry_gh_release' );
 delete_option( 'nry_repair_071' );
 delete_option( 'nry_excerpt_last' );
+delete_option( 'nry_calls' );
+delete_option( 'nry_hist_migrated' );

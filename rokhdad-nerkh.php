@@ -1,8 +1,8 @@
 <?php
 /**
  * Plugin Name: رخداد نرخ — قیمت لحظه‌ای طلا و ارز
- * Description: لندینگ، کارت قیمت، جدول، نمودار و ماشین‌حساب طلا و ارز با داده‌ی BrsApi. صفحه‌ی مستقل با نامک دلخواه، تزریق در برگه‌ها و نوشته‌ها، شورت‌کد برای هر ماژول، هماهنگ با Yoast SEO و Rank Math.
- * Version: 0.7.5
+ * Description: لندینگ، کارت قیمت، جدول، نمودار و ماشین‌حساب طلا و ارز با داده‌ی وب‌سرویس nerkh.io. صفحه‌ی مستقل با نامک دلخواه، تزریق در برگه‌ها و نوشته‌ها، شورت‌کد برای هر ماژول، هماهنگ با Yoast SEO و Rank Math.
+ * Version: 0.8.0
  * Requires at least: 5.8
  * Requires PHP: 7.4
  * Author: Gostaresh News
@@ -12,7 +12,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'NRY_VER', '0.7.5' );
+define( 'NRY_VER', '0.8.0' );
 define( 'NRY_FILE', __FILE__ );
 define( 'NRY_DIR', plugin_dir_path( __FILE__ ) );
 define( 'NRY_URL', plugin_dir_url( __FILE__ ) );

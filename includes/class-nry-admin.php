@@ -64,9 +64,12 @@ class NRY_Admin {
 			$old_key       = isset( $s['api_key'] ) ? $s['api_key'] : '';
 			$s['api_key']  = isset( $_POST['api_key'] ) ? sanitize_text_field( wp_unslash( $_POST['api_key'] ) ) : '';
 			$old_plan      = isset( $s['plan'] ) ? $s['plan'] : 'free';
-			$s['plan']     = ( isset( $_POST['plan'] ) && 'pro' === $_POST['plan'] ) ? 'pro' : 'free';
-			$s['interval'] = min( 60, max( 1, isset( $_POST['interval'] ) ? (int) $_POST['interval'] : 5 ) );
-			$s['toman']    = empty( $_POST['toman'] ) ? 0 : 1;
+			$plan          = isset( $_POST['plan'] ) ? sanitize_key( wp_unslash( $_POST['plan'] ) ) : 'free';
+			$s['plan']     = isset( NRY_Api::PLANS[ $plan ] ) ? $plan : 'free';
+			$s['interval'] = min( 60, max( 1, isset( $_POST['interval'] ) ? (int) $_POST['interval'] : 15 ) );
+			update_option( 'nry_settings', $s );
+			// Never faster than the plan's quota allows.
+			$s['interval'] = NRY_Api::interval();
 			update_option( 'nry_settings', $s );
 			NRY_Api::reschedule();
 			if ( ( $s['api_key'] !== $old_key || $s['plan'] !== $old_plan ) && '' !== $s['api_key'] ) {
@@ -369,15 +372,20 @@ class NRY_Admin {
 
 		self::form_open( 'connect' );
 		echo '<table class="form-table" role="presentation">';
-		echo '<tr><th scope="row"><label for="nry-plan">نوع وب‌سرویس BrsApi</label></th><td><select id="nry-plan" name="plan"><option value="free"' . selected( 'free', $s['plan'], false ) . '>رایگان (Gold_Currency)</option><option value="pro"' . selected( 'pro', $s['plan'], false ) . '>حرفه‌ای (Gold_Currency_Pro)</option></select><p class="description">با کلید رایگان، «رایگان» را انتخاب کنید. در این حالت نمودار و کمترین/بیشترین روز از قیمت‌هایی ساخته می‌شود که خود افزونه از لحظه‌ی نصب ثبت می‌کند.</p></td></tr>';
-		echo '<tr><th scope="row"><label for="nry-key">کلید API</label></th><td><input id="nry-key" name="api_key" type="password" class="regular-text" dir="ltr" autocomplete="off" value="' . esc_attr( $s['api_key'] ) . '"><p class="description">کلید فقط در پایگاه داده‌ی همین سایت ذخیره می‌شود و در خروجی صفحه‌ها نمی‌آید.</p></td></tr>';
-		echo '<tr><th scope="row"><label for="nry-int">فاصله‌ی به‌روزرسانی</label></th><td><input id="nry-int" name="interval" type="number" min="1" max="60" class="small-text" value="' . esc_attr( $s['interval'] ) . '"> دقیقه</td></tr>';
-		echo '<tr><th scope="row">واحد نمایش</th><td><label><input type="checkbox" name="toman" value="1"' . checked( 1, (int) $s['toman'], false ) . '> قیمت‌های ریالی به تومان تبدیل شوند</label></td></tr>';
+		echo '<tr><th scope="row"><label for="nry-key">توکن nerkh.io</label></th><td><input id="nry-key" name="api_key" type="password" class="regular-text" dir="ltr" autocomplete="off" value="' . esc_attr( $s['api_key'] ) . '"><p class="description">توکن (کلید وب‌سرویس) را از پنل nerkh.io کپی کنید. فقط در پایگاه داده‌ی همین سایت ذخیره می‌شود و در خروجی صفحه‌ها نمی‌آید.</p></td></tr>';
+		echo '<tr><th scope="row"><label for="nry-plan">پکیج nerkh.io</label></th><td><select id="nry-plan" name="plan">';
+		foreach ( NRY_Api::PLANS as $k => $p ) {
+			echo '<option value="' . esc_attr( $k ) . '"' . selected( $k, NRY_Api::plan(), false ) . '>' . esc_html( $p['label'] . ' — ' . ( $p['hour'] ? nry_fa( $p['hour'] ) . ' درخواست در ساعت، ' : '' ) . nry_fa( number_format( $p['day'] ) ) . ' در روز' ) . '</option>';
+		}
+		echo '</select><p class="description">همان پکیجی که در nerkh.io دارید. افزونه بیشتر از سقف آن درخواست نمی‌فرستد. هر به‌روزرسانی فقط یک درخواست است و همه‌ی قیمت‌های طلا، سکه، ارز و رمزارز را یک‌جا می‌گیرد.</p></td></tr>';
+		echo '<tr><th scope="row"><label for="nry-int">فاصله‌ی به‌روزرسانی</label></th><td><input id="nry-int" name="interval" type="number" min="' . (int) NRY_Api::min_interval() . '" max="60" class="small-text" value="' . esc_attr( NRY_Api::interval() ) . '"> دقیقه<p class="description">کمترین مقدار برای پکیج فعلی: ' . esc_html( nry_fa( NRY_Api::min_interval() ) ) . ' دقیقه، تا چند درخواست هم برای «تست اتصال» باقی بماند.</p></td></tr>';
 		echo '</table>';
 		submit_button( 'ذخیره' );
 		echo '</form>';
 
-		echo '<h2>وضعیت داده</h2><p>';
+		$u  = NRY_Api::usage();
+		$pl = NRY_Api::PLANS[ NRY_Api::plan() ];
+		echo '<h2>وضعیت داده</h2><p>منبع: <strong dir="ltr">api.nerkh.io</strong> — مصرف: ' . esc_html( nry_fa( $u['hour'] ) . ( $pl['hour'] ? ' از ' . nry_fa( $pl['hour'] ) : '' ) . ' درخواست در ساعت گذشته، ' . nry_fa( $u['day'] ) . ' از ' . nry_fa( number_format( $pl['day'] ) ) . ' امروز.' ) . '</p><p>';
 		if ( $n ) {
 			echo 'آخرین دریافت: <strong>' . esc_html( nry_fa( wp_date( 'Y/m/d H:i', (int) $snap['fetched'] ) ) ) . '</strong> — ' . esc_html( nry_fa( $n ) ) . ' نماد.';
 		} else {
@@ -387,7 +395,7 @@ class NRY_Admin {
 		if ( $n ) {
 			$main = NRY_Markets::get( 'gold' );
 			$days = $main ? NRY_History::days( $main['main'] ) : 0;
-			echo '<p>تاریخچه‌ی ثبت‌شده در سایت: <strong>' . esc_html( nry_fa( $days ) ) . ' روز</strong>' . ( NRY_Api::is_pro() ? ' (در نسخه‌ی حرفه‌ای، نمودار در اصل از خود وب‌سرویس خوانده می‌شود).' : '. نمودار هفتگی، ماهانه و سالانه به‌مرور با همین داده پر می‌شود.' ) . '</p>';
+			echo '<p>تاریخچه‌ی ثبت‌شده در سایت: <strong>' . esc_html( nry_fa( $days ) ) . ' روز</strong>. نمودارها، تغییر روزانه و کمترین/بیشترین از همین داده ساخته می‌شوند و به‌مرور کامل‌تر می‌شوند.</p>';
 		}
 		if ( ! empty( $err['message'] ) ) {
 			echo '<div class="notice notice-error inline"><p>آخرین خطا (' . esc_html( nry_fa( wp_date( 'H:i', (int) $err['time'] ) ) ) . '): ' . esc_html( $err['message'] ) . '</p></div>';
@@ -676,7 +684,7 @@ class NRY_Admin {
 		$text( 'slug', 'نامک پیشنهادی صفحه', urldecode( $m['slug'] ), '', true );
 		echo '</table>';
 
-		echo '<h2>داده</h2><p class="description">نام نمادها را از برگه‌ی «اتصال و داده» بردارید. <code dir="ltr">~کلمه</code> یعنی همه‌ی ردیف‌هایی که نامشان آن کلمه‌ها را دارد؛ <code dir="ltr">@gold</code>، <code dir="ltr">@currency</code> یا <code dir="ltr">@cryptocurrency</code> یعنی همه‌ی ردیف‌های آن بخش.</p><table class="form-table" role="presentation">';
+		echo '<h2>داده</h2><p class="description">نام نمادها را از برگه‌ی «اتصال و داده» بردارید. <code dir="ltr">~کلمه</code> یعنی همه‌ی ردیف‌هایی که نامشان آن کلمه‌ها را دارد؛ <code dir="ltr">@gold</code>، <code dir="ltr">@currency</code> یا <code dir="ltr">@crypto</code> یعنی همه‌ی ردیف‌های آن بخش.</p><table class="form-table" role="presentation">';
 		$text( 'main', 'نماد اصلی (کارت قیمت و نمودار)', $m['main'], '', true );
 		$text( 'main_label', 'برچسب روی کارت', $m['main_label'] );
 		$text( 'stamp1', 'مُهر کارت، سطر اول', $m['stamp'][0], 'کوتاه؛ مثلاً ۷۵۰ یا USD' );

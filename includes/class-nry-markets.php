@@ -7,7 +7,7 @@ defined( 'ABSPATH' ) || exit;
  * and new ones can be created there. Everything is filterable via `nry_markets`.
  *
  * Symbol references: "USD" exact symbol · "~دلار سنا" every row whose name has those words ·
- * "@cryptocurrency" every row of that API section.
+ * "@gold", "@currency", "@crypto" every row of that section of the nerkh.io feed.
  */
 class NRY_Markets {
 
@@ -22,13 +22,13 @@ class NRY_Markets {
 				'hl'          => 'طلا',
 				'kicker'      => 'بازار طلا و سکه تهران',
 				'lead'        => 'قیمت لحظه‌ای طلای ۱۸ عیار، مثقال طلا، سکه و انس جهانی؛ همراه با نمودار تغییرات و ماشین‌حساب طلا.',
-				'main'        => 'IR_GOLD_18K',
+				'main'        => 'GOLD18K',
 				'main_label'  => 'هر گرم طلای ۱۸ عیار',
 				'stamp'       => array( '۷۵۰', 'عیار ۱۸' ),
-				'board'       => array( '~مثقال', 'IR_COIN_EMAMI', 'XAUUSD', 'USD', 'IR_GOLD_24K' ),
+				'board'       => array( 'MAZANEH', 'SEKE_EMAMI', 'OUNCE', 'USD', 'GOLD24K' ),
 				'tables'      => array(
-					'gold' => array( 'title' => 'جدول قیمت طلا امروز', 'head' => 'نوع طلا', 'symbols' => array( 'IR_GOLD_18K', 'IR_GOLD_24K', '~مثقال', 'IR_GOLD_MELTED', 'XAUUSD' ) ),
-					'coin' => array( 'title' => 'جدول قیمت سکه امروز', 'head' => 'نوع سکه', 'symbols' => array( 'IR_COIN_EMAMI', 'IR_COIN_BAHAR', 'IR_COIN_HALF', 'IR_COIN_QUARTER', 'IR_COIN_1G' ) ),
+					'gold' => array( 'title' => 'جدول قیمت طلا امروز', 'head' => 'نوع طلا', 'symbols' => array( 'GOLD18K', 'GOLD24K', 'MAZANEH', '~آب‌شده', 'OUNCE' ) ),
+					'coin' => array( 'title' => 'جدول قیمت سکه امروز', 'head' => 'نوع سکه', 'symbols' => array( 'SEKE_EMAMI', 'SEKE_BAHAR', 'SEKE_NIM', 'SEKE_ROB', 'SEKE_1G' ) ),
 					'parsian' => array( 'title' => 'قیمت سکه پارسیان', 'head' => 'نوع سکه', 'symbols' => array( '~پارسیان' ) ),
 				),
 				'chart_title' => 'نمودار قیمت طلای ۱۸ عیار',
@@ -53,12 +53,12 @@ class NRY_Markets {
 				'hl'          => 'سکه',
 				'kicker'      => 'بازار سکه تهران',
 				'lead'        => 'قیمت لحظه‌ای سکه امامی، بهار آزادی، نیم‌سکه، ربع‌سکه و سکه گرمی؛ همراه با نمودار تغییرات.',
-				'main'        => 'IR_COIN_EMAMI',
+				'main'        => 'SEKE_EMAMI',
 				'main_label'  => 'سکه امامی',
 				'stamp'       => array( '۹۰۰', 'عیار' ),
-				'board'       => array( 'IR_COIN_BAHAR', 'IR_COIN_HALF', 'IR_COIN_QUARTER', 'IR_COIN_1G' ),
+				'board'       => array( 'SEKE_BAHAR', 'SEKE_NIM', 'SEKE_ROB', 'SEKE_1G' ),
 				'tables'      => array(
-					'coin'    => array( 'title' => 'جدول قیمت سکه امروز', 'head' => 'نوع سکه', 'symbols' => array( 'IR_COIN_EMAMI', 'IR_COIN_BAHAR', 'IR_COIN_HALF', 'IR_COIN_QUARTER', 'IR_COIN_1G' ) ),
+					'coin'    => array( 'title' => 'جدول قیمت سکه امروز', 'head' => 'نوع سکه', 'symbols' => array( 'SEKE_EMAMI', 'SEKE_BAHAR', 'SEKE_NIM', 'SEKE_ROB', 'SEKE_1G' ) ),
 					'parsian' => array( 'title' => 'قیمت سکه پارسیان', 'head' => 'نوع سکه', 'symbols' => array( '~پارسیان' ) ),
 				),
 				'chart_title' => 'نمودار قیمت سکه امامی',
@@ -84,9 +84,9 @@ class NRY_Markets {
 				'main'        => 'USD',
 				'main_label'  => 'دلار آمریکا',
 				'stamp'       => array( 'USD', 'دلار' ),
-				'board'       => array( 'EUR', 'AED', 'USDT_IRT', 'GBP' ),
+				'board'       => array( 'EUR', 'AED', 'USDT', 'GBP' ),
 				'tables'      => array(
-					'dollar' => array( 'title' => 'جدول قیمت دلار امروز', 'head' => 'نوع دلار', 'symbols' => array( 'USD', '~دلار سنا', '~دلار نیما', 'USDT_IRT' ) ),
+					'dollar' => array( 'title' => 'جدول قیمت دلار امروز', 'head' => 'نوع دلار', 'symbols' => array( 'USD', 'USDT' ) ),
 					'fx'     => array( 'title' => 'قیمت سایر ارزها', 'head' => 'ارز', 'symbols' => array( 'EUR', 'AED', 'GBP', 'TRY', 'CNY' ) ),
 				),
 				'chart_title' => 'نمودار قیمت دلار',
@@ -111,9 +111,9 @@ class NRY_Markets {
 				'main'        => 'BTC',
 				'main_label'  => 'بیت‌کوین',
 				'stamp'       => array( 'BTC', 'بیت‌کوین' ),
-				'board'       => array( 'ETH', 'USDT', 'BNB', 'XRP', '@cryptocurrency' ),
+				'board'       => array( 'ETH', 'USDT', 'XRP', 'BNB', '@crypto' ),
 				'tables'      => array(
-					'crypto' => array( 'title' => 'جدول قیمت ارزهای دیجیتال', 'head' => 'ارز دیجیتال', 'symbols' => array( '@cryptocurrency' ) ),
+					'crypto' => array( 'title' => 'جدول قیمت ارزهای دیجیتال', 'head' => 'ارز دیجیتال', 'symbols' => array( '@crypto' ) ),
 				),
 				'chart_title' => 'نمودار قیمت بیت‌کوین',
 				'calc'        => '',

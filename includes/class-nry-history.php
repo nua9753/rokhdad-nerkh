@@ -4,7 +4,7 @@ defined( 'ABSPATH' ) || exit;
 /**
  * Local price history.
  *
- * The free BrsApi feed only returns the current price, so the plugin keeps its own
+ * The price feed only returns the current price, so the plugin keeps its own
  * record: one point per symbol every ten minutes (kept two days, for the 24h chart
  * and the day's low/high) and one closing value per symbol per day (kept about a year).
  */
@@ -28,6 +28,31 @@ class NRY_History {
 		if ( self::DB_VER !== get_option( 'nry_db_ver' ) ) {
 			self::install();
 		}
+		if ( ! get_option( 'nry_hist_migrated' ) ) {
+			self::migrate_symbols();
+		}
+	}
+
+	/** History recorded under the old source's symbols continues under the nerkh.io codes (both in Toman). */
+	public static function migrate_symbols() {
+		global $wpdb;
+		update_option( 'nry_hist_migrated', 1, false );
+		$table = self::table();
+		foreach ( NRY_Api::OLD_SYMBOLS as $old => $new ) {
+			$wpdb->query( $wpdb->prepare( "UPDATE IGNORE {$table} SET symbol = %s WHERE symbol = %s", $new, $old ) ); // phpcs:ignore WordPress.DB
+			$wpdb->query( $wpdb->prepare( "DELETE FROM {$table} WHERE symbol = %s", $old ) ); // phpcs:ignore WordPress.DB
+		}
+	}
+
+	/** Closing price of the last recorded day before $date ("1405/03/04"), or 0. */
+	public static function prev_close( $symbol, $date ) {
+		global $wpdb;
+		if ( self::DB_VER !== get_option( 'nry_db_ver' ) ) {
+			return 0;
+		}
+		$table = self::table();
+		$p     = $wpdb->get_var( $wpdb->prepare( "SELECT p FROM {$table} WHERE symbol = %s AND kind = %d AND t < %d ORDER BY t DESC LIMIT 1", $symbol, self::DAILY, self::day_key( $date ) ) ); // phpcs:ignore WordPress.DB
+		return $p ? (float) $p : 0;
 	}
 
 	public static function install() {
@@ -49,7 +74,7 @@ class NRY_History {
 
 	/** "1405/07/16" to 14050716. Falls back to the site's own date when the row has none. */
 	private static function day_key( $date ) {
-		$digits = preg_replace( '/\D/', '', nry_norm( $date ) );
+		$digits = substr( preg_replace( '/\D/', '', nry_norm( $date ) ), 0, 8 );
 		return 8 === strlen( $digits ) ? (int) $digits : (int) wp_date( 'Ymd' );
 	}
 

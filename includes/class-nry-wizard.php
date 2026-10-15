@@ -51,11 +51,12 @@ class NRY_Wizard {
 		$s     = is_array( $saved ) ? $saved : array();
 
 		if ( 1 === $step ) {
-			$s['plan']    = ( isset( $_POST['plan'] ) && 'pro' === $_POST['plan'] ) ? 'pro' : 'free';
+			$plan         = isset( $_POST['plan'] ) ? sanitize_key( wp_unslash( $_POST['plan'] ) ) : 'free';
+			$s['plan']    = isset( NRY_Api::PLANS[ $plan ] ) ? $plan : 'free';
 			$s['api_key'] = isset( $_POST['api_key'] ) ? sanitize_text_field( wp_unslash( $_POST['api_key'] ) ) : '';
 			update_option( 'nry_settings', $s );
 			if ( '' === $s['api_key'] ) {
-				self::go( 1, 'کلید API را وارد کنید.' );
+				self::go( 1, 'توکن nerkh.io را وارد کنید.' );
 			}
 			$r = NRY_Api::refresh();
 			if ( is_wp_error( $r ) ) {
@@ -123,10 +124,13 @@ class NRY_Wizard {
 		}
 
 		if ( 1 === $step ) {
-			echo '<h2>۱. اتصال به منبع قیمت</h2><p>کلید وب‌سرویس BrsApi را وارد و نوع آن را انتخاب کنید. با زدن «ادامه» اتصال آزمایش و اولین قیمت‌ها دریافت می‌شود.</p>';
-			$plan = nry_opt( 'plan', 'free' );
-			echo '<p><label><input type="radio" name="plan" value="free"' . checked( 'free', $plan, false ) . '> وب‌سرویس رایگان</label> &nbsp; <label><input type="radio" name="plan" value="pro"' . checked( 'pro', $plan, false ) . '> وب‌سرویس حرفه‌ای (Pro)</label></p>';
-			echo '<p><label for="nry-wk"><strong>کلید API</strong></label><br><input id="nry-wk" name="api_key" type="password" class="regular-text" dir="ltr" autocomplete="off" value="' . esc_attr( nry_opt( 'api_key', '' ) ) . '"></p>';
+			echo '<h2>۱. اتصال به منبع قیمت</h2><p>توکن وب‌سرویس nerkh.io را وارد و پکیج آن را انتخاب کنید. با زدن «ادامه» اتصال آزمایش و اولین قیمت‌ها دریافت می‌شود.</p>';
+			echo '<p><label for="nry-wp"><strong>پکیج</strong></label><br><select id="nry-wp" name="plan">';
+			foreach ( NRY_Api::PLANS as $k => $p ) {
+				echo '<option value="' . esc_attr( $k ) . '"' . selected( $k, NRY_Api::plan(), false ) . '>' . esc_html( $p['label'] . ' — ' . ( $p['hour'] ? nry_fa( $p['hour'] ) . ' در ساعت، ' : '' ) . nry_fa( number_format( $p['day'] ) ) . ' در روز' ) . '</option>';
+			}
+			echo '</select></p>';
+			echo '<p><label for="nry-wk"><strong>توکن nerkh.io</strong></label><br><input id="nry-wk" name="api_key" type="password" class="regular-text" dir="ltr" autocomplete="off" value="' . esc_attr( nry_opt( 'api_key', '' ) ) . '"></p>';
 			submit_button( 'آزمایش اتصال و ادامه' );
 		} elseif ( 2 === $step ) {
 			echo '<h2>۲. صفحه‌های قیمت</h2><p>برای هر بازار یک برگه با آدرس دلخواه ساخته می‌شود. نامک می‌تواند لاتین یا فارسی باشد. اگر می‌خواهید قیمت‌ها را فقط داخل برگه‌های موجود نشان دهید، تیک‌ها را بردارید و بعداً از «نمایش در محتوا» تنظیم کنید.</p>';

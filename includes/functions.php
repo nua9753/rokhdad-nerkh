@@ -6,7 +6,7 @@ function nry_settings() {
 	$defaults = array(
 		'api_key'        => '',
 		'plan'           => 'free',
-		'interval'       => 5,
+		'interval'       => 15,
 		'toman'          => 1,
 		'navy'           => '#0a2463',
 		'gold'           => '#e3ae2b',
