@@ -94,16 +94,42 @@ class NRY_Api {
 	 * Walk any JSON shape and collect every object that looks like a price row.
 	 * The nearest named parent key is kept as the row's section.
 	 */
+	/**
+	 * A number from the feed, whatever its format: 6214700, "6214700", "6,214,700", "۶٬۲۱۴٬۷۰۰",
+	 * "103959.5", "۳٫۵", or an object holding the value. Returns null when there is no number.
+	 */
+	public static function to_number( $v ) {
+		if ( is_array( $v ) ) {
+			foreach ( array( 'value', 'price', 'p', 'amount', 'close' ) as $k ) {
+				if ( isset( $v[ $k ] ) ) {
+					return self::to_number( $v[ $k ] );
+				}
+			}
+			return null;
+		}
+		if ( is_int( $v ) || is_float( $v ) ) {
+			return (float) $v;
+		}
+		$s = nry_norm( (string) $v );
+		$s = str_replace( array( '٫', '/', '−', '–' ), array( '.', '.', '-', '-' ), $s );
+		$s = preg_replace( '/[^0-9.\-eE]/u', '', $s );
+		// Several dots can only be thousands separators.
+		if ( substr_count( $s, '.' ) > 1 ) {
+			$s = str_replace( '.', '', $s );
+		}
+		return is_numeric( $s ) ? (float) $s : null;
+	}
+
 	private static function collect_prices( $node, $section, &$out ) {
 		if ( ! is_array( $node ) ) {
 			return;
 		}
 		if ( isset( $node['symbol'] ) && isset( $node['price'] ) && is_scalar( $node['symbol'] ) ) {
 			$symbol = (string) $node['symbol'];
-			$price  = (float) $node['price'];
-			$pct    = isset( $node['change_percent'] ) ? (float) $node['change_percent'] : 0.0;
+			$price  = (float) self::to_number( $node['price'] );
+			$pct    = isset( $node['change_percent'] ) ? (float) self::to_number( $node['change_percent'] ) : 0.0;
 			if ( isset( $node['change_value'] ) ) {
-				$change = (float) $node['change_value'];
+				$change = (float) self::to_number( $node['change_value'] );
 			} else {
 				// Crypto rows carry only a percentage; work the amount back from it.
 				$change = ( 100 + $pct ) > 0 ? $price * $pct / ( 100 + $pct ) : 0.0;
@@ -120,6 +146,7 @@ class NRY_Api {
 				'time'    => isset( $node['time'] ) ? (string) $node['time'] : '',
 				'unix'    => isset( $node['time_unix'] ) ? (int) $node['time_unix'] : 0,
 				'section' => (string) $section,
+				'raw'     => is_scalar( $node['price'] ) ? substr( (string) $node['price'], 0, 40 ) : wp_json_encode( $node['price'] ),
 			);
 			return;
 		}
@@ -153,6 +180,19 @@ class NRY_Api {
 		self::collect_prices( $data, '', $items );
 		if ( empty( $items ) ) {
 			$err = new WP_Error( 'nry_empty', 'پاسخ API هیچ قیمتی نداشت.' );
+			update_option( 'nry_last_error', array( 'time' => time(), 'message' => $err->get_error_message() ), false );
+			return $err;
+		}
+		// A reply whose prices are all zero or unreadable is not stored: the last good prices stay on the site.
+		$good = 0;
+		foreach ( $items as $it ) {
+			if ( $it['price'] > 0 ) {
+				$good++;
+			}
+		}
+		if ( 0 === $good ) {
+			$first = reset( $items );
+			$err   = new WP_Error( 'nry_zero', 'قیمت‌های پاسخ API صفر یا ناخوانا بود و ذخیره نشد؛ آخرین قیمت‌های سالم سر جایشان ماندند. نمونه‌ی مقدار دریافتی برای ' . $first['symbol'] . ': «' . $first['raw'] . '»' );
 			update_option( 'nry_last_error', array( 'time' => time(), 'message' => $err->get_error_message() ), false );
 			return $err;
 		}

@@ -2,7 +2,7 @@
 Requires at least: 5.8
 Tested up to: 6.6
 Requires PHP: 7.4
-Stable tag: 0.7.4
+Stable tag: 0.7.5
 License: GPLv2 or later
 
 لندینگ، کارت قیمت، جدول، نمودار و ماشین‌حساب طلا و ارز با داده‌ی BrsApi (وب‌سرویس رایگان یا حرفه‌ای).
